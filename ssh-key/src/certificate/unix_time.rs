@@ -29,11 +29,7 @@ impl UnixTime {
     /// than or equal to `i64::MAX`.
     #[cfg(not(feature = "std"))]
     pub fn new(secs: u64) -> Result<Self> {
-        if secs <= MAX_SECS {
-            Ok(Self { secs })
-        } else {
-            Err(Error::Time)
-        }
+        Ok(Self { secs })
     }
 
     /// Create a new Unix timestamp.
@@ -43,11 +39,7 @@ impl UnixTime {
     /// `Debug` output)
     #[cfg(feature = "std")]
     pub fn new(secs: u64) -> Result<Self> {
-        if secs > MAX_SECS {
-            return Err(Error::Time);
-        }
-
-        match UNIX_EPOCH.checked_add(Duration::from_secs(secs)) {
+        match UNIX_EPOCH.checked_add(Duration::from_secs(core::cmp::min(secs, MAX_SECS))) {
             Some(time) => Ok(Self { secs, time }),
             None => Err(Error::Time),
         }
@@ -117,8 +109,10 @@ impl fmt::Debug for UnixTime {
 
 #[cfg(test)]
 mod tests {
+    use core::time::Duration;
+    use std::time::UNIX_EPOCH;
+
     use super::{UnixTime, MAX_SECS};
-    use crate::Error;
 
     #[test]
     fn new_with_max_secs() {
@@ -126,7 +120,14 @@ mod tests {
     }
 
     #[test]
-    fn new_over_max_secs_returns_error() {
-        assert_eq!(UnixTime::new(MAX_SECS + 1), Err(Error::Time));
+    fn new_over_max_secs_capped_at_max_secs() {
+        assert_eq!(
+            UnixTime::new(MAX_SECS + 1)
+                .expect("could not build UnixTime")
+                .time,
+            UNIX_EPOCH
+                .checked_add(Duration::from_secs(i64::MAX as u64))
+                .expect("could not add max duration to UNIX epoch")
+        );
     }
 }
